@@ -1,0 +1,33 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: dataway
+  datasource:
+    # 演示用内存库；生产由部署仓注入真实数据源，账号只给只读 + 模板所需写权限
+    url: jdbc:h2:mem:riskdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+
+dataway:
+  datasource-name: main
+  default-max-rows: 100
+  # 表白名单：不在名单内的表一律拒绝（TABLE_NOT_ALLOWED）
+  allowed-tables:
+    - patrol_event
+    - patrol_verdict
+  # 写入模板：客户端只能引用 ID，不能自带 SQL
+  templates:
+    event.insert: "INSERT INTO patrol_event(event_id, domain, version) VALUES (?, ?, ?)"
+    verdict.insert: "INSERT INTO patrol_verdict(event_id, decision, score) VALUES (?, ?, ?)"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
