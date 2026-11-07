@@ -55,7 +55,7 @@ public class DatawayController {
             int columnCount = meta.getColumnCount();
             List<String> columns = new ArrayList<>(columnCount);
             for (int i = 1; i <= columnCount; i++) {
-                // 列名统一小写：跨数据库（H2/PG/MySQL）大小写规则不一致，网关出口统一口径
+                // 列名统一小写：跨数据库（PG 与 H2 兼容模式）大小写规则不一致，网关出口统一口径
                 columns.add(meta.getColumnLabel(i).toLowerCase(Locale.ROOT));
             }
             List<Map<String, Object>> rows = new ArrayList<>();
