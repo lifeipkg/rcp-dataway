@@ -27,7 +27,7 @@ dataway:
   allowed-tables:
     - patrol_event
     - patrol_verdict
-    # iam-go 经本服务读写用户与会话（RL-005），表结构真源在 rcp-ops/migrations/V1.4.0
+    # iam 经本服务读写用户与会话（RL-005），表结构真源在 rcp-ops/migrations/V1.4.0
     - iam_users
     - iam_sessions
   # 写入模板：客户端只能引用 ID，不能自带 SQL
