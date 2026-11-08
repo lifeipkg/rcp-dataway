@@ -1,0 +1,36 @@
+# 数据网关服务端配置：数据源、表白名单、写入模板。
+#
+# 白名单与模板都在服务端，客户端只能引用名字，不能传连接串或自定义写入语句。
+# 本文件随二进制内嵌（go:embed）；部署侧可用 DATAWAY_CONFIG 指向外部同名 YAML 覆盖。
+# 凭据不落在这里的业务默认值之外：真实口令由 DATAWAY_DB_DSN 或 DB_PASSWORD 注入。
+
+port: 8090
+
+datasource:
+  # 客户端请求里的 datasource 只能填这个名字（DATASOURCE_NOT_ALLOWED 之外的取值一律拒绝）
+  name: main
+  # 演示默认值；部署必须用 DATAWAY_DB_DSN 或 DB_HOST/DB_USER/DB_PASSWORD 覆盖
+  dsn: postgres://risk_app:risk_app_pwd@localhost:5432/risk_control?sslmode=disable
+
+# 单次查询返回的行数上限；客户端 maxRows 只能往下压，不能突破这个值
+default-max-rows: 100
+
+# 表白名单：不在名单内的表一律拒绝（TABLE_NOT_ALLOWED）
+allowed-tables:
+  - patrol_event
+  - patrol_verdict
+  # iam 经本服务读写用户与会话（RL-005），表结构真源在 rcp-ops/migrations/V1.4.0
+  - iam_users
+  - iam_sessions
+
+# 写入模板：客户端只能引用 ID，不能自带 SQL。
+# 启动时逐条校验：必须是单条 INSERT/UPDATE/DELETE，含分号或注释即拒绝启动。
+templates:
+  event.insert: "INSERT INTO patrol_event(event_id, domain, version) VALUES (?, ?, ?)"
+  verdict.insert: "INSERT INTO patrol_verdict(event_id, decision, score) VALUES (?, ?, ?)"
+  iam.user.insert: "INSERT INTO iam_users(user_id, username, display_name, role, status, password_hash, password_salt) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  iam.user.update: "UPDATE iam_users SET display_name = ?, role = ?, status = ?, password_hash = ?, password_salt = ? WHERE user_id = ?"
+  iam.session.insert: "INSERT INTO iam_sessions(token, user_id, expires_at) VALUES (?, ?, CAST(? AS TIMESTAMP))"
+  iam.session.delete: "DELETE FROM iam_sessions WHERE token = ?"
+  iam.session.deleteByUser: "DELETE FROM iam_sessions WHERE user_id = ?"
+  iam.session.cleanExpired: "DELETE FROM iam_sessions WHERE expires_at < CURRENT_TIMESTAMP"
