@@ -17,8 +17,6 @@ default-max-rows: 100
 
 # 表白名单：不在名单内的表一律拒绝（TABLE_NOT_ALLOWED）
 allowed-tables:
-  - patrol_event
-  - patrol_verdict
   # iam 经本服务读写用户与会话（RL-005），表结构真源在 rcp-ops/migrations/V1.4.0
   - iam_users
   - iam_sessions
@@ -26,8 +24,6 @@ allowed-tables:
 # 写入模板：客户端只能引用 ID，不能自带 SQL。
 # 启动时逐条校验：必须是单条 INSERT/UPDATE/DELETE，含分号或注释即拒绝启动。
 templates:
-  event.insert: "INSERT INTO patrol_event(event_id, domain, version) VALUES (?, ?, ?)"
-  verdict.insert: "INSERT INTO patrol_verdict(event_id, decision, score) VALUES (?, ?, ?)"
   iam.user.insert: "INSERT INTO iam_users(user_id, username, display_name, role, status, password_hash, password_salt) VALUES (?, ?, ?, ?, ?, ?, ?)"
   iam.user.update: "UPDATE iam_users SET display_name = ?, role = ?, status = ?, password_hash = ?, password_salt = ? WHERE user_id = ?"
   iam.session.insert: "INSERT INTO iam_sessions(token, user_id, expires_at) VALUES (?, ?, CAST(? AS TIMESTAMP))"

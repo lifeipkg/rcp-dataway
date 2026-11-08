@@ -39,7 +39,7 @@ func (f *fakeDB) Query(_ context.Context, sql string, args []any, maxRows int) (
 	if maxRows > 0 && len(rows) > maxRows {
 		rows = rows[:maxRows]
 	}
-	return store.Result{Columns: []string{"event_id", "decision"}, Rows: rows}, nil
+	return store.Result{Columns: []string{"session_id", "status"}, Rows: rows}, nil
 }
 
 func (f *fakeDB) Exec(_ context.Context, sql string, args []any) (int64, error) {
@@ -57,12 +57,12 @@ func (f *fakeDB) Close()                     {}
 func newTestRouter(t *testing.T, db store.DB) http.Handler {
 	t.Helper()
 	templates, err := guard.NewTemplates(map[string]string{
-		"verdict.insert": "INSERT INTO patrol_verdict(event_id, decision, score) VALUES (?, ?, ?)",
+		"iam.session.insert": "INSERT INTO iam_sessions(session_id, user_id, expires_at) VALUES (?, ?, ?)",
 	})
 	if err != nil {
 		t.Fatalf("模板登记失败: %v", err)
 	}
-	g := guard.NewGuard([]string{"patrol_event", "patrol_verdict"})
+	g := guard.NewGuard([]string{"iam_users", "iam_sessions"})
 	return NewRouter(NewHandler(db, g, templates, "main", 100))
 }
 
@@ -87,12 +87,12 @@ func decode(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 func TestExecuteThenQuery(t *testing.T) {
 	db := &fakeDB{
 		affected: 1,
-		rows:     []map[string]any{{"event_id": "job:1", "decision": "INTERCEPT"}},
+		rows:     []map[string]any{{"session_id": "s-1", "status": "ACTIVE"}},
 	}
 	h := newTestRouter(t, db)
 
 	rec := post(t, h, "/dataway/execute",
-		`{"datasource":"main","templateId":"verdict.insert","params":["job:1","INTERCEPT",80]}`)
+		`{"datasource":"main","templateId":"iam.session.insert","params":["s-1","ACTIVE",80]}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("模板写入期望 200，得到 %d: %s", rec.Code, rec.Body.String())
 	}
@@ -100,12 +100,12 @@ func TestExecuteThenQuery(t *testing.T) {
 		t.Fatalf("affectedRows 期望 1，得到 %v", got)
 	}
 	// 写入必须走改写后的语句：JDBC 的 ? 不能直接发给 PostgreSQL
-	if want := "INSERT INTO patrol_verdict(event_id, decision, score) VALUES ($1, $2, $3)"; db.execSQL != want {
+	if want := "INSERT INTO iam_sessions(session_id, user_id, expires_at) VALUES ($1, $2, $3)"; db.execSQL != want {
 		t.Fatalf("写入语句未改写\n得到: %s\n期望: %s", db.execSQL, want)
 	}
 
 	rec = post(t, h, "/dataway/query",
-		`{"datasource":"main","sql":"SELECT event_id, decision FROM patrol_verdict WHERE event_id = ?","params":["job:1"]}`)
+		`{"datasource":"main","sql":"SELECT session_id, status FROM iam_sessions WHERE session_id = ?","params":["s-1"]}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("查询期望 200，得到 %d: %s", rec.Code, rec.Body.String())
 	}
@@ -117,8 +117,8 @@ func TestExecuteThenQuery(t *testing.T) {
 	if !ok || len(rows) != 1 {
 		t.Fatalf("rows 形状不符: %v", body["rows"])
 	}
-	if got := rows[0].(map[string]any)["decision"]; got != "INTERCEPT" {
-		t.Fatalf("decision 期望 INTERCEPT，得到 %v", got)
+	if got := rows[0].(map[string]any)["status"]; got != "ACTIVE" {
+		t.Fatalf("status 期望 ACTIVE，得到 %v", got)
 	}
 	if !strings.Contains(db.querySQL, "$1") {
 		t.Fatalf("查询语句未改写成 $n: %s", db.querySQL)
@@ -141,19 +141,19 @@ func TestRejections(t *testing.T) {
 		{
 			name: "参数个数不匹配",
 			path: "/dataway/execute",
-			body: `{"datasource":"main","templateId":"verdict.insert","params":["job:1"]}`,
+			body: `{"datasource":"main","templateId":"iam.session.insert","params":["s-1"]}`,
 			code: guard.CodeParamMismatch,
 		},
 		{
 			name: "查询里的裸 DML",
 			path: "/dataway/query",
-			body: `{"datasource":"main","sql":"DELETE FROM patrol_verdict"}`,
+			body: `{"datasource":"main","sql":"DELETE FROM iam_sessions"}`,
 			code: guard.CodeOnlySelect,
 		},
 		{
 			name: "未登记的数据源",
 			path: "/dataway/query",
-			body: `{"datasource":"shadow","sql":"SELECT 1 FROM patrol_event"}`,
+			body: `{"datasource":"shadow","sql":"SELECT 1 FROM iam_users"}`,
 			code: guard.CodeDatasourceDenied,
 		},
 		{
@@ -186,7 +186,7 @@ func TestRejections(t *testing.T) {
 func TestRejectionDoesNotTouchDatabase(t *testing.T) {
 	db := &fakeDB{}
 	h := newTestRouter(t, db)
-	post(t, h, "/dataway/query", `{"datasource":"main","sql":"DELETE FROM patrol_verdict"}`)
+	post(t, h, "/dataway/query", `{"datasource":"main","sql":"DELETE FROM iam_sessions"}`)
 	if db.querySQL != "" || db.execSQL != "" {
 		t.Fatalf("被拒绝的请求不应到达数据库层: query=%q exec=%q", db.querySQL, db.execSQL)
 	}
@@ -194,12 +194,12 @@ func TestRejectionDoesNotTouchDatabase(t *testing.T) {
 
 func TestMaxRowsApplied(t *testing.T) {
 	db := &fakeDB{rows: []map[string]any{
-		{"event_id": "a"}, {"event_id": "b"},
+		{"session_id": "a"}, {"session_id": "b"},
 	}}
 	h := newTestRouter(t, db)
 
 	rec := post(t, h, "/dataway/query",
-		`{"datasource":"main","sql":"SELECT event_id FROM patrol_event","maxRows":1}`)
+		`{"datasource":"main","sql":"SELECT session_id FROM iam_users","maxRows":1}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("期望 200，得到 %d", rec.Code)
 	}
@@ -215,7 +215,7 @@ func TestMaxRowsCannotExceedServerDefault(t *testing.T) {
 	db := &fakeDB{}
 	h := newTestRouter(t, db) // 服务端默认 100
 	post(t, h, "/dataway/query",
-		`{"datasource":"main","sql":"SELECT event_id FROM patrol_event","maxRows":1000}`)
+		`{"datasource":"main","sql":"SELECT session_id FROM iam_users","maxRows":1000}`)
 	if db.queryMax != 100 {
 		t.Fatalf("客户端 maxRows 不得突破服务端默认 100，得到 %d", db.queryMax)
 	}
@@ -224,16 +224,16 @@ func TestMaxRowsCannotExceedServerDefault(t *testing.T) {
 func TestDatasourceDefaultsWhenOmitted(t *testing.T) {
 	db := &fakeDB{}
 	h := newTestRouter(t, db)
-	rec := post(t, h, "/dataway/query", `{"sql":"SELECT event_id FROM patrol_event"}`)
+	rec := post(t, h, "/dataway/query", `{"sql":"SELECT session_id FROM iam_users"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("缺省 datasource 应落到服务端配置名，得到 %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
 func TestInternalErrorIsNotLeaked(t *testing.T) {
-	db := &fakeDB{queryErr: errors.New(`relation "patrol_event" does not exist`)}
+	db := &fakeDB{queryErr: errors.New(`relation "iam_users" does not exist`)}
 	h := newTestRouter(t, db)
-	rec := post(t, h, "/dataway/query", `{"datasource":"main","sql":"SELECT event_id FROM patrol_event"}`)
+	rec := post(t, h, "/dataway/query", `{"datasource":"main","sql":"SELECT session_id FROM iam_users"}`)
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("数据库故障期望 500，得到 %d", rec.Code)
 	}
@@ -241,7 +241,7 @@ func TestInternalErrorIsNotLeaked(t *testing.T) {
 	if body["error"] != "INTERNAL_ERROR" {
 		t.Fatalf("期望 INTERNAL_ERROR，得到 %v", body["error"])
 	}
-	if strings.Contains(rec.Body.String(), "patrol_event") {
+	if strings.Contains(rec.Body.String(), "iam_users") {
 		t.Fatalf("数据库错误细节不应回给调用方: %s", rec.Body.String())
 	}
 }

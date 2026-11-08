@@ -21,12 +21,12 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.DefaultMaxRows != 100 {
 		t.Fatalf("默认行数上限 100，得到 %d", cfg.DefaultMaxRows)
 	}
-	if len(cfg.AllowedTables) != 4 {
-		t.Fatalf("表白名单应为 4 张，得到 %v", cfg.AllowedTables)
+	if len(cfg.AllowedTables) != 2 {
+		t.Fatalf("表白名单应为 2 张，得到 %v", cfg.AllowedTables)
 	}
 	// iam 的写入路径依赖这些模板存在；少一条就是某条业务写入在运行时 400。
 	for _, id := range []string{
-		"event.insert", "verdict.insert", "iam.user.insert", "iam.user.update",
+		"iam.user.insert", "iam.user.update",
 		"iam.session.insert", "iam.session.delete", "iam.session.deleteByUser",
 		"iam.session.cleanExpired",
 	} {

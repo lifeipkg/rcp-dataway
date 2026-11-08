@@ -7,7 +7,7 @@ import (
 )
 
 func newTestGuard() *Guard {
-	return NewGuard([]string{"patrol_event", "patrol_verdict"})
+	return NewGuard([]string{"iam_users", "iam_sessions"})
 }
 
 func codeOf(t *testing.T, err error) string {
@@ -20,18 +20,18 @@ func codeOf(t *testing.T, err error) string {
 }
 
 func TestValidateAllowsWhitelistedSelect(t *testing.T) {
-	got, err := newTestGuard().Validate("  SELECT * FROM patrol_verdict WHERE event_id = ? ;  ")
+	got, err := newTestGuard().Validate("  SELECT * FROM iam_sessions WHERE session_id = ? ;  ")
 	if err != nil {
 		t.Fatalf("白名单单表 SELECT 应放行: %v", err)
 	}
 	// 尾分号去掉、首尾空白去掉；占位符原样保留（改写是下一步）
-	if want := "SELECT * FROM patrol_verdict WHERE event_id = ?"; got != want {
+	if want := "SELECT * FROM iam_sessions WHERE session_id = ?"; got != want {
 		t.Fatalf("语句规范化不符\n得到: %s\n期望: %s", got, want)
 	}
 }
 
 func TestValidateAllowsJoinOnWhitelistedTables(t *testing.T) {
-	sql := "SELECT e.event_id FROM patrol_event e JOIN patrol_verdict v ON e.event_id = v.event_id"
+	sql := "SELECT e.session_id FROM iam_users e JOIN iam_sessions v ON e.session_id = v.session_id"
 	if _, err := newTestGuard().Validate(sql); err != nil {
 		t.Fatalf("白名单表 join 应放行: %v", err)
 	}
@@ -39,10 +39,10 @@ func TestValidateAllowsJoinOnWhitelistedTables(t *testing.T) {
 
 func TestValidateAllowsLowerCaseSelectAndQuotedTable(t *testing.T) {
 	for _, sql := range []string{
-		"select * from patrol_event",
-		`SELECT * FROM "patrol_verdict"`,
-		"SELECT * FROM public.patrol_verdict",
-		"SELECT (SELECT count(*) FROM patrol_event) AS c FROM patrol_verdict",
+		"select * from iam_users",
+		`SELECT * FROM "iam_sessions"`,
+		"SELECT * FROM public.iam_sessions",
+		"SELECT (SELECT count(*) FROM iam_users) AS c FROM iam_sessions",
 	} {
 		if _, err := newTestGuard().Validate(sql); err != nil {
 			t.Fatalf("%q 应放行，得到 %v", sql, err)
@@ -57,11 +57,11 @@ func TestValidateRejects(t *testing.T) {
 		code string
 	}{
 		{"空语句", "  ", CodeEmptySQL},
-		{"多语句夹带 DDL", "SELECT 1 FROM patrol_event; DROP TABLE patrol_event", CodeMultiStatement},
-		{"注释截断审计", "SELECT * FROM patrol_event -- 注释", CodeCommentNotAllowed},
-		{"块注释", "SELECT /* x */ * FROM patrol_event", CodeCommentNotAllowed},
-		{"非 SELECT", "UPDATE patrol_verdict SET score = 0", CodeOnlySelect},
-		{"CTE 夹带写操作", "SELECT * FROM (DELETE FROM patrol_event RETURNING event_id) t", CodeDMLNotAllowed},
+		{"多语句夹带 DDL", "SELECT 1 FROM iam_users; DROP TABLE iam_users", CodeMultiStatement},
+		{"注释截断审计", "SELECT * FROM iam_users -- 注释", CodeCommentNotAllowed},
+		{"块注释", "SELECT /* x */ * FROM iam_users", CodeCommentNotAllowed},
+		{"非 SELECT", "UPDATE iam_sessions SET expires_at = 0", CodeOnlySelect},
+		{"CTE 夹带写操作", "SELECT * FROM (DELETE FROM iam_users RETURNING session_id) t", CodeDMLNotAllowed},
 		{"白名单外的表", "SELECT * FROM user_credentials", CodeTableNotAllowed},
 		{"schema 前缀按最后一段判定", "SELECT * FROM public.sys_user", CodeTableNotAllowed},
 	}
@@ -81,7 +81,7 @@ func TestValidateRejectionMessageListsAllowedTables(t *testing.T) {
 	if !errors.As(err, &rejected) {
 		t.Fatalf("期望 Rejected，得到 %v", err)
 	}
-	if !strings.Contains(rejected.Message, "patrol_verdict") {
+	if !strings.Contains(rejected.Message, "iam_sessions") {
 		t.Fatalf("拒绝信息应给出允许范围，得到 %q", rejected.Message)
 	}
 }
@@ -93,9 +93,9 @@ func TestValidateReportsFirstHitOnly(t *testing.T) {
 		sql  string
 		code string
 	}{
-		{"DELETE /* c */ FROM patrol_event", CodeCommentNotAllowed},
-		{"SELECT 1 FROM patrol_event; DROP TABLE patrol_event", CodeMultiStatement},
-		{"UPDATE user_credentials SET score = 0", CodeOnlySelect},
+		{"DELETE /* c */ FROM iam_users", CodeCommentNotAllowed},
+		{"SELECT 1 FROM iam_users; DROP TABLE iam_users", CodeMultiStatement},
+		{"UPDATE user_credentials SET expires_at = 0", CodeOnlySelect},
 		{"SELECT * FROM (DELETE FROM user_credentials) t", CodeDMLNotAllowed},
 	}
 	for _, tc := range cases {
@@ -107,9 +107,9 @@ func TestValidateReportsFirstHitOnly(t *testing.T) {
 }
 
 func TestNewGuardDeduplicatesAndLowers(t *testing.T) {
-	g := NewGuard([]string{"Patrol_Event", "patrol_event", "  ", "patrol_verdict"})
+	g := NewGuard([]string{"Iam_Users", "iam_users", "  ", "iam_sessions"})
 	got := g.AllowedTables()
-	if len(got) != 2 || got[0] != "patrol_event" || got[1] != "patrol_verdict" {
+	if len(got) != 2 || got[0] != "iam_users" || got[1] != "iam_sessions" {
 		t.Fatalf("白名单去重/小写失败: %v", got)
 	}
 }

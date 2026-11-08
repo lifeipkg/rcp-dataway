@@ -75,9 +75,9 @@ docker build -t rcp-dataway:local .
 ```bash
 go run . &
 curl --noproxy '*' -X POST localhost:8090/dataway/execute -H 'Content-Type: application/json' \
-  -d '{"datasource":"main","templateId":"verdict.insert","params":["job:1","INTERCEPT",80]}'
+  -d '{"datasource":"main","templateId":"iam.session.delete","params":["tok-1"]}'
 curl --noproxy '*' -X POST localhost:8090/dataway/query -H 'Content-Type: application/json' \
-  -d '{"datasource":"main","sql":"SELECT event_id, decision FROM patrol_verdict"}'
+  -d '{"datasource":"main","sql":"SELECT user_id, role FROM iam_users WHERE status = ?","params":["ACTIVE"]}'
 ```
 
 ## 已知边界
