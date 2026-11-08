@@ -14,7 +14,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(properties = "spring.cloud.nacos.discovery.enabled=false")
+@SpringBootTest(properties = {
+        "spring.cloud.nacos.discovery.enabled=false",
+        // 生产默认数据源是 PostgreSQL；测试用 H2 内存库，避免依赖真实实例
+        "spring.datasource.url=jdbc:h2:mem:dataway-test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+        "spring.datasource.username=sa",
+        "spring.datasource.password="
+})
 @AutoConfigureMockMvc
 class DatawayControllerTest {
 
