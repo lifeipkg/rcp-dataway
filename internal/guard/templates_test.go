@@ -7,18 +7,18 @@ import (
 
 func TestTemplatesResolveRewritesAndCounts(t *testing.T) {
 	templates, err := NewTemplates(map[string]string{
-		"verdict.insert": "INSERT INTO patrol_verdict(event_id, decision, score) VALUES (?, ?, ?)",
+		"iam.session.insert": "INSERT INTO iam_sessions(session_id, user_id, expires_at) VALUES (?, ?, ?)",
 		"session.insert": "INSERT INTO iam_sessions(token, user_id, expires_at) VALUES (?, ?, CAST(? AS TIMESTAMP))",
 	})
 	if err != nil {
 		t.Fatalf("合法模板应能登记: %v", err)
 	}
 
-	sql, count, err := templates.Resolve("verdict.insert")
+	sql, count, err := templates.Resolve("iam.session.insert")
 	if err != nil {
 		t.Fatalf("已登记模板应能解析: %v", err)
 	}
-	if want := "INSERT INTO patrol_verdict(event_id, decision, score) VALUES ($1, $2, $3)"; sql != want {
+	if want := "INSERT INTO iam_sessions(session_id, user_id, expires_at) VALUES ($1, $2, $3)"; sql != want {
 		t.Fatalf("模板未改写为 $n\n得到: %s\n期望: %s", sql, want)
 	}
 	if count != 3 {
@@ -32,7 +32,7 @@ func TestTemplatesResolveRewritesAndCounts(t *testing.T) {
 
 func TestTemplatesUnknownID(t *testing.T) {
 	templates, err := NewTemplates(map[string]string{
-		"event.insert": "INSERT INTO patrol_event(event_id) VALUES (?)",
+		"iam.user.insert": "INSERT INTO iam_users(user_id) VALUES (?)",
 	})
 	if err != nil {
 		t.Fatalf("模板登记失败: %v", err)
@@ -56,7 +56,7 @@ func TestNewTemplatesRejectsBadShapes(t *testing.T) {
 		{"空语句", "   ", CodeTemplateNotFound},
 		{"含分号", "INSERT INTO t(a) VALUES (?); DROP TABLE t", CodeMultiStatement},
 		{"含注释", "INSERT INTO t(a) VALUES (?) -- x", CodeCommentNotAllowed},
-		{"不是 DML", "SELECT * FROM patrol_event", CodeDMLNotAllowed},
+		{"不是 DML", "SELECT * FROM iam_users", CodeDMLNotAllowed},
 		{"DDL", "CREATE TABLE t(a INT)", CodeDMLNotAllowed},
 	}
 	for _, tc := range cases {
